@@ -1,0 +1,60 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build/package artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test/type/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.pyright/
+.coverage
+coverage.xml
+htmlcov/
+
+# Blender temporary/backup files
+*.blend1
+*.blend2
+*.blend3
+*.blend@
+*.blend~
+*.blend.tmp
+*.tmp
+*.bak
+*.autosave
+
+# Packaged add-on archives / release artifacts
+*.zip
+*.tar.gz
+*.tgz
+
+# Logs
+*.log
+logs/
+
+# IDE/editor local settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
