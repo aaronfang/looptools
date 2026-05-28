@@ -2774,13 +2774,18 @@ def gstretch_resolve_strokes(context):
         strokes, drawing = gstretch_get_frame_strokes(frame)
         return gstretch_prepare_strokes(strokes, drawing=drawing)
 
-    if looptools.gstretch_use_guide == "GPencil" and looptools.gstretch_guide is not None:
-        guide = looptools.gstretch_guide
-        data = getattr(guide, "data", None)
-        layer = gstretch_get_active_layer(data)
-        frame = gstretch_get_active_frame(layer)
-        strokes, drawing = gstretch_get_frame_strokes(frame)
-        return gstretch_prepare_strokes(strokes, guide.matrix_world, drawing)
+    if looptools.gstretch_use_guide == "GPencil":
+        if getattr(looptools, "gstretch_active_guide_slot", 0) == 2:
+            guide = looptools.gstretch_guide_2
+        else:
+            guide = looptools.gstretch_guide
+        if guide is not None:
+            data = getattr(guide, "data", None)
+            layer = gstretch_get_active_layer(data)
+            frame = gstretch_get_active_frame(layer)
+            strokes, drawing = gstretch_get_frame_strokes(frame)
+            return gstretch_prepare_strokes(strokes, guide.matrix_world, drawing)
+
 
     return []
 
@@ -4361,8 +4366,18 @@ class GStretch(Operator):
                     "stroke",
         default='regular'
         )
+    guide_slot: IntProperty(
+        name="Guide Slot",
+        description="Guide slot used by panel buttons",
+        default=0,
+        min=0,
+        max=3,
+        options={'HIDDEN'}
+        )
+
 
     @classmethod
+
     def poll(cls, context):
         ob = context.active_object
         return(ob and ob.type == 'MESH' and context.mode == 'EDIT_MESH')
@@ -4409,19 +4424,36 @@ class GStretch(Operator):
             col.operator("remove.gp", text="Delete GPencil strokes")
 
     def invoke(self, context, event):
+        guide_slot = self.guide_slot
         # flush cached strokes
         if 'Gstretch' in looptools_cache:
             looptools_cache['Gstretch']['single_loops'] = []
         # load custom settings
         settings_load(self)
+        self.guide_slot = guide_slot
         return self.execute(context)
 
     def execute(self, context):
+        looptools = context.window_manager.looptools
+        if self.guide_slot in (1, 2):
+            looptools.gstretch_use_guide = "GPencil"
+            looptools.gstretch_active_guide_slot = self.guide_slot
+        elif self.guide_slot == 3:
+            looptools.gstretch_use_guide = "Annotation"
+            looptools.gstretch_active_guide_slot = 0
+        else:
+            looptools.gstretch_use_guide = "None"
+            looptools.gstretch_active_guide_slot = 0
+        cache_delete("Gstretch")
+
         # initialise
         object, bm = initialise()
+
+
         settings_write(self)
 
         # check cache to see if we can save time
+
         cached, safe_strokes, loops, derived, mapping = cache_read("Gstretch",
             object, bm, False, False)
         if cached:
@@ -4764,8 +4796,9 @@ class VIEW3D_MT_edit_mesh_looptools(Menu):
         layout.operator("mesh.looptools_circle")
         layout.operator("mesh.looptools_curve")
         layout.operator("mesh.looptools_flatten")
-        layout.operator("mesh.looptools_gstretch")
+        layout.operator("mesh.looptools_gstretch").guide_slot = 0
         layout.operator("mesh.looptools_bridge", text="Loft").loft = True
+
         layout.operator("mesh.looptools_relax")
         layout.operator("mesh.looptools_space")
 
@@ -4926,16 +4959,30 @@ class VIEW3D_PT_tools_looptools(Panel):
             split.prop(lt, "display_gstretch", text="", icon='DOWNARROW_HLT')
         else:
             split.prop(lt, "display_gstretch", text="", icon='RIGHTARROW')
-        split.operator("mesh.looptools_gstretch")
+        split.operator("mesh.looptools_gstretch").guide_slot = 0
         # gstretch settings
+
         if lt.display_gstretch:
             box = col.column(align=True).box().column()
             box.prop(lt, "gstretch_use_guide")
-            if lt.gstretch_use_guide == "GPencil":
-                box.prop(lt, "gstretch_guide")
+            if lt.gstretch_use_guide == "Annotation":
+                op = box.operator("mesh.looptools_gstretch", text="Gstretch Annotation")
+                op.guide_slot = 3
+            elif lt.gstretch_use_guide == "GPencil":
+                row = box.row(align=True)
+                row.prop(lt, "gstretch_guide", text="GPencil object:")
+                op = row.operator("mesh.looptools_gstretch", text="Gstretch")
+                op.guide_slot = 1
+                row = box.row(align=True)
+                row.prop(lt, "gstretch_guide_2", text="GPencil object:")
+                op = row.operator("mesh.looptools_gstretch", text="Gstretch")
+                op.guide_slot = 2
+            box.separator()
             box.prop(lt, "gstretch_method")
 
+
             col_conv = box.column(align=True)
+
             col_conv.prop(lt, "gstretch_conversion", text="")
             if lt.gstretch_conversion == 'distance':
                 col_conv.prop(lt, "gstretch_conversion_distance")
@@ -5424,11 +5471,33 @@ class LoopToolsProps(PropertyGroup):
         )
     gstretch_guide: PointerProperty(
         name="GPencil object",
-        description="Set GPencil object",
+        description="Set first GPencil object",
         type=bpy.types.Object
+        )
+    gstretch_guide_2: PointerProperty(
+        name="GPencil object",
+        description="Set second GPencil object",
+        type=bpy.types.Object
+        )
+    gstretch_guide_slot: IntProperty(
+        name="Guide Slot",
+        description="Last GStretch GPencil guide slot used",
+        default=0,
+        min=0,
+        max=2,
+        options={'HIDDEN'}
+        )
+    gstretch_active_guide_slot: IntProperty(
+        name="Active Guide Slot",
+        description="Currently active GStretch GPencil guide slot",
+        default=0,
+        min=0,
+        max=2,
+        options={'HIDDEN'}
         )
 
     # relax properties
+
     relax_input: EnumProperty(name="Input",
         items=(("all", "Parallel (all)", "Also use non-selected "
                                            "parallel loops as input"),
